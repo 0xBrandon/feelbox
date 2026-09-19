@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://day134eufbrbt"]
 
 [ext_resource type="PackedScene" uid="uid://be6ge5bvetsu5" path="res://player.tscn" id="1_f3sb7"]
+[ext_resource type="Script" uid="uid://tw8ykcvr3l88" path="res://player.gd" id="2_fj7yv"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_887ed"]
 size = Vector2(1600, 64)
@@ -9,6 +10,7 @@ size = Vector2(1600, 64)
 
 [node name="Player" parent="." unique_id=520103506 instance=ExtResource("1_f3sb7")]
 position = Vector2(400, 300)
+script = ExtResource("2_fj7yv")
 
 [node name="Ground" type="StaticBody2D" parent="." unique_id=1456287716]
 position = Vector2(576, 500)

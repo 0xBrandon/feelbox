@@ -18,12 +18,22 @@ const APEX_SPEED        := 110.0    # "near the top of the arc" threshold
 const APEX_GRAVITY_MULT := 0.55     # gravity is weaker up there = hang time
 const MAX_FALL          := 1200.0   # terminal velocity
 
-# --- forgiveness (new in v4) ---
+# --- forgiveness ---
 const COYOTE_TIME := 0.10   # you can still jump this long after leaving a ledge
 const JUMP_BUFFER := 0.12   # a press this early still counts when you land
 
+# --- deformation (new in v5) ---
+const JUMP_STRETCH    := Vector2(0.75, 1.30)   # thin and tall on launch
+const LAND_SQUASH_MAX := Vector2(1.35, 0.70)   # wide and flat on a hard landing
+const LAND_SOFT       := 250.0    # impact speed below this: no squash
+const LAND_HARD       := 900.0    # impact speed at or above this: full squash
+const SQUASH_RECOVER  := 12.0     # how fast the box returns to square
+
+@onready var body: Node2D = $Body
+
 var _coyote := 0.0
 var _buffer := 0.0
+var _squash := Vector2.ONE
 
 
 func _physics_process(delta: float) -> void:
@@ -51,7 +61,6 @@ func _physics_process(delta: float) -> void:
 	else:
 		_buffer = maxf(_buffer - delta, 0.0)
 
-	# Both timers have credit, so jump
 	if _buffer > 0.0 and _coyote > 0.0:
 		_jump()
 
@@ -59,13 +68,30 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_released("jump") and velocity.y < 0.0:
 		velocity.y *= JUMP_CUT
 
+	# Read these BEFORE moving: move_and_slide() destroys both
+	var was_on_floor := is_on_floor()
+	var impact       := velocity.y
+
 	move_and_slide()
+
+	if is_on_floor() and not was_on_floor:
+		_on_land(impact)
+
+	# Ease the deformation back to square, every frame
+	_squash = _squash.lerp(Vector2.ONE, 1.0 - exp(-SQUASH_RECOVER * delta))
+	body.scale = _squash
 
 
 func _jump() -> void:
 	velocity.y = JUMP_VELOCITY
 	_coyote = 0.0
 	_buffer = 0.0
+	_squash = JUMP_STRETCH
+
+
+func _on_land(impact: float) -> void:
+	var t := clampf(inverse_lerp(LAND_SOFT, LAND_HARD, impact), 0.0, 1.0)
+	_squash = Vector2.ONE.lerp(LAND_SQUASH_MAX, t)
 
 
 func _apply_gravity(delta: float) -> void:

@@ -22,18 +22,30 @@ const MAX_FALL          := 1200.0   # terminal velocity
 const COYOTE_TIME := 0.10   # you can still jump this long after leaving a ledge
 const JUMP_BUFFER := 0.12   # a press this early still counts when you land
 
-# --- deformation (new in v5) ---
+# --- deformation ---
 const JUMP_STRETCH    := Vector2(0.75, 1.30)   # thin and tall on launch
 const LAND_SQUASH_MAX := Vector2(1.35, 0.70)   # wide and flat on a hard landing
 const LAND_SOFT       := 250.0    # impact speed below this: no squash
 const LAND_HARD       := 900.0    # impact speed at or above this: full squash
 const SQUASH_RECOVER  := 12.0     # how fast the box returns to square
 
-@onready var body: Node2D = $Body
+# --- the world reacts (new in v6) ---
+const CAM_LEAD     := 46.0    # pixels the camera looks ahead at full sprint
+const CAM_LERP     := 8.0     # how fast the lead catches up
+const DUST_MIN     := 400.0   # impact speed that kicks up dust
+const HARD_LANDING := 900.0   # impact speed that shakes the screen
+const SHAKE_MAX    := 6.0     # pixels of jitter on the heaviest landing
+const SHAKE_DECAY  := 30.0    # pixels per second, decaying linearly
 
-var _coyote := 0.0
-var _buffer := 0.0
-var _squash := Vector2.ONE
+@onready var body: Node2D          = $Body
+@onready var cam:  Camera2D        = $Camera2D
+@onready var dust: CPUParticles2D  = $Dust
+
+var _coyote   := 0.0
+var _buffer   := 0.0
+var _squash   := Vector2.ONE
+var _cam_lead := 0.0
+var _shake    := 0.0
 
 
 func _physics_process(delta: float) -> void:
@@ -81,6 +93,8 @@ func _physics_process(delta: float) -> void:
 	_squash = _squash.lerp(Vector2.ONE, 1.0 - exp(-SQUASH_RECOVER * delta))
 	body.scale = _squash
 
+	_update_camera(delta)
+
 
 func _jump() -> void:
 	velocity.y = JUMP_VELOCITY
@@ -92,6 +106,25 @@ func _jump() -> void:
 func _on_land(impact: float) -> void:
 	var t := clampf(inverse_lerp(LAND_SOFT, LAND_HARD, impact), 0.0, 1.0)
 	_squash = Vector2.ONE.lerp(LAND_SQUASH_MAX, t)
+
+	if impact >= DUST_MIN:
+		dust.restart()
+
+	if impact >= HARD_LANDING:
+		var s := clampf(inverse_lerp(HARD_LANDING, MAX_FALL, impact), 0.0, 1.0)
+		_shake = maxf(_shake, lerpf(SHAKE_MAX * 0.5, SHAKE_MAX, s))
+
+
+func _update_camera(delta: float) -> void:
+	# Look ahead in the direction of travel, proportional to speed
+	var target := velocity.x / MAX_SPEED * CAM_LEAD
+	_cam_lead = lerpf(_cam_lead, target, 1.0 - exp(-CAM_LERP * delta))
+
+	# Linear decay, so it reaches exactly zero
+	_shake = maxf(_shake - SHAKE_DECAY * delta, 0.0)
+	var jitter := Vector2(randf_range(-_shake, _shake), randf_range(-_shake, _shake))
+
+	cam.offset = Vector2(_cam_lead, 0.0) + jitter
 
 
 func _apply_gravity(delta: float) -> void:
